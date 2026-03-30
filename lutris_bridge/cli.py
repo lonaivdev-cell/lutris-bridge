@@ -69,6 +69,13 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def cmd_clean(args: argparse.Namespace) -> int:
+    from lutris_bridge.state import load_state
+
+    state = load_state()
+    if not state.managed_games:
+        logging.info("No managed games to clean.")
+        return 0
+
     from lutris_bridge.config import build_config
     from lutris_bridge.sync import clean
 

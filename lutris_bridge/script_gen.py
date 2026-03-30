@@ -11,7 +11,6 @@ and controller input.
 
 import logging
 import re
-import shlex
 import stat
 from datetime import datetime, timezone
 from pathlib import Path
@@ -92,14 +91,11 @@ def _resolve_wine_binary(
 
 
 def _shell_quote(s: str) -> str:
-    """Quote a string for safe use in a bash script.
+    """Escape a string for safe embedding inside bash double quotes.
 
-    Uses shlex.quote for full safety against injection, then strips the outer
-    single quotes so the result can be embedded in our own double-quoted context.
-    For paths/values that go into double-quoted strings, we escape the dangerous
-    characters directly.
+    Escapes backslashes, double quotes, dollar signs, and backticks —
+    the four characters that are special inside double-quoted strings in bash.
     """
-    # For use inside double quotes: escape \, ", $, `
     return s.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
 
 
@@ -224,7 +220,7 @@ def generate_fallback_script(game: LutrisGame) -> str:
     """
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    return "\n".join([
+    return _assert_no_gamescope("\n".join([
         "#!/bin/bash",
         f"# lutris-bridge launch script for: {game.name}",
         f"# Generated: {timestamp} | Slug: {game.slug} | DO NOT EDIT — will be overwritten",
@@ -232,7 +228,7 @@ def generate_fallback_script(game: LutrisGame) -> str:
         "",
         f'lutris "lutris:rungameid/{game.id}"',
         "",
-    ])
+    ]))
 
 
 def generate_launch_script(

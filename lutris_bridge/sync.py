@@ -12,10 +12,9 @@ from pathlib import Path
 from lutris_bridge.artwork import fetch_artwork
 from lutris_bridge.config import Config
 from lutris_bridge.lutris_config import parse_game_config
-from lutris_bridge.lutris_db import LutrisGame, discover_games
+from lutris_bridge.lutris_db import discover_games
 from lutris_bridge.script_gen import generate_launch_script
 from lutris_bridge.state import (
-    BridgeState,
     ManagedGame,
     load_state,
     now_iso,

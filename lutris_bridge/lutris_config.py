@@ -96,18 +96,6 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
-def _get_nested(data: dict, *keys, default=None):
-    """Safely get a nested value from a dict."""
-    current = data
-    for key in keys:
-        if not isinstance(current, dict):
-            return default
-        current = current.get(key, default)
-        if current is default:
-            return default
-    return current
-
-
 def merge_configs(game_raw: dict, runner_raw: dict) -> GameConfig:
     """Merge game config over runner config and extract a GameConfig.
 
