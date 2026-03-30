@@ -11,6 +11,7 @@ and controller input.
 
 import logging
 import re
+import shlex
 import stat
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,21 @@ from lutris_bridge.lutris_config import GameConfig
 from lutris_bridge.lutris_db import LutrisGame
 
 logger = logging.getLogger(__name__)
+
+
+def _assert_no_gamescope(script: str) -> str:
+    """Validate that a generated script never invokes gamescope.
+
+    Nested gamescope breaks display and controller input in Bazzite's
+    Gaming Mode (Gamescope session). See bazzite issue #1500.
+    """
+    if "gamescope" in script.lower():
+        raise RuntimeError(
+            "BUG: Generated script contains 'gamescope'. "
+            "Scripts must never invoke gamescope — the session-level "
+            "Gamescope in Gaming Mode handles compositing."
+        )
+    return script
 
 
 def _sanitize_filename(slug: str) -> str:
@@ -32,6 +48,11 @@ def _resolve_wine_binary(
 ) -> str:
     """Resolve the full path to the Wine binary.
 
+    Checks, in order:
+    1. Exact match: runners/wine/{version}/bin/wine
+    2. Prefix match without arch suffix (x86_64, i686)
+    3. Fallback to system "wine"
+
     Args:
         runners_dir: Lutris runners directory.
         wine_version: Wine version string from config (e.g., "lutris-GE-Proton8-14-x86_64").
@@ -42,23 +63,43 @@ def _resolve_wine_binary(
     if not wine_version:
         return "wine"
 
+    # 1. Exact match
     wine_path = runners_dir / "wine" / wine_version / "bin" / "wine"
     if wine_path.exists():
         return str(wine_path)
 
-    # Try without architecture suffix
-    for candidate in (runners_dir / "wine").iterdir() if (runners_dir / "wine").is_dir() else []:
-        if candidate.name.startswith(wine_version.split("-x86_64")[0]):
-            bin_path = candidate / "bin" / "wine"
-            if bin_path.exists():
-                return str(bin_path)
+    # 2. Strip architecture suffix and try prefix match
+    wine_dir = runners_dir / "wine"
+    if wine_dir.is_dir():
+        # Strip common arch suffixes from the end
+        base_version = wine_version
+        for arch_suffix in ("-x86_64", "-i686", "-x86"):
+            if base_version.endswith(arch_suffix):
+                base_version = base_version[: -len(arch_suffix)]
+                break
 
-    logger.warning("Wine binary not found for version %s, falling back to system wine", wine_version)
+        for candidate in sorted(wine_dir.iterdir()):
+            if candidate.name.startswith(base_version) and candidate.is_dir():
+                bin_path = candidate / "bin" / "wine"
+                if bin_path.exists():
+                    return str(bin_path)
+
+    logger.warning(
+        "Wine binary not found for version '%s', falling back to system wine",
+        wine_version,
+    )
     return "wine"
 
 
-def _shell_escape(s: str) -> str:
-    """Escape a string for safe use in bash double quotes."""
+def _shell_quote(s: str) -> str:
+    """Quote a string for safe use in a bash script.
+
+    Uses shlex.quote for full safety against injection, then strips the outer
+    single quotes so the result can be embedded in our own double-quoted context.
+    For paths/values that go into double-quoted strings, we escape the dangerous
+    characters directly.
+    """
+    # For use inside double quotes: escape \, ", $, `
     return s.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
 
 
@@ -94,18 +135,18 @@ def generate_wine_script(
 
     # WINEPREFIX
     if game_config.prefix:
-        lines.append(f'export WINEPREFIX="{_shell_escape(game_config.prefix)}"')
+        lines.append(f'export WINEPREFIX="{_shell_quote(game_config.prefix)}"')
 
     # DLL overrides
     if game_config.dll_overrides:
-        lines.append(f'export WINEDLLOVERRIDES="{_shell_escape(game_config.dll_overrides)}"')
+        lines.append(f'export WINEDLLOVERRIDES="{_shell_quote(game_config.dll_overrides)}"')
 
     # Standard Wine/DXVK environment
     lines.append('export WINE_LARGE_ADDRESS_AWARE=1')
     lines.append('export STAGING_SHARED_MEMORY=1')
 
     if game_config.prefix:
-        lines.append(f'export DXVK_STATE_CACHE_PATH="{_shell_escape(game_config.prefix)}"')
+        lines.append(f'export DXVK_STATE_CACHE_PATH="{_shell_quote(game_config.prefix)}"')
 
     if game_config.dxvk:
         lines.append('export DXVK_LOG_LEVEL=none')
@@ -113,13 +154,13 @@ def generate_wine_script(
 
     # Extra environment variables from config
     for key, value in sorted(game_config.env.items()):
-        lines.append(f'export {key}="{_shell_escape(value)}"')
+        lines.append(f'export {key}="{_shell_quote(value)}"')
 
     lines.append("")
 
     # Working directory
     if game_config.working_dir:
-        lines.append(f'cd "{_shell_escape(game_config.working_dir)}"')
+        lines.append(f'cd "{_shell_quote(game_config.working_dir)}"')
         lines.append("")
 
     # Build launch command
@@ -130,10 +171,10 @@ def generate_wine_script(
     exe = game_config.exe or ""
     args = game_config.args
 
-    lines.append(f'{cmd_prefix}"{_shell_escape(wine_binary)}" "{_shell_escape(exe)}" {args}'.rstrip())
+    lines.append(f'{cmd_prefix}"{_shell_quote(wine_binary)}" "{_shell_quote(exe)}" {args}'.rstrip())
     lines.append("")
 
-    return "\n".join(lines)
+    return _assert_no_gamescope("\n".join(lines))
 
 
 def generate_linux_script(
@@ -152,7 +193,7 @@ def generate_linux_script(
 
     # Extra environment variables
     for key, value in sorted(game_config.env.items()):
-        lines.append(f'export {key}="{_shell_escape(value)}"')
+        lines.append(f'export {key}="{_shell_quote(value)}"')
 
     if game_config.env:
         lines.append("")
@@ -160,7 +201,7 @@ def generate_linux_script(
     # Working directory
     working_dir = game_config.working_dir
     if working_dir:
-        lines.append(f'cd "{_shell_escape(working_dir)}"')
+        lines.append(f'cd "{_shell_quote(working_dir)}"')
 
     # Build launch command
     cmd_prefix = ""
@@ -170,10 +211,10 @@ def generate_linux_script(
     exe = game_config.exe or ""
     args = game_config.args
 
-    lines.append(f'{cmd_prefix}"{_shell_escape(exe)}" {args}'.rstrip())
+    lines.append(f'{cmd_prefix}"{_shell_quote(exe)}" {args}'.rstrip())
     lines.append("")
 
-    return "\n".join(lines)
+    return _assert_no_gamescope("\n".join(lines))
 
 
 def generate_fallback_script(game: LutrisGame) -> str:

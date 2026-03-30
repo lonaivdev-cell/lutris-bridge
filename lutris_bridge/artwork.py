@@ -109,6 +109,7 @@ def fetch_artwork(
     grid_dir: Path,
     api_key: str | None = None,
     lutris_data_dir: Path | None = None,
+    slug: str = "",
     force: bool = False,
 ) -> dict[str, bool]:
     """Fetch artwork for a game from SteamGridDB.
@@ -122,6 +123,7 @@ def fetch_artwork(
         grid_dir: Steam's grid artwork directory.
         api_key: SteamGridDB API key. If None, skips SGDB and tries Lutris fallback.
         lutris_data_dir: Lutris data directory for fallback artwork.
+        slug: Lutris game slug for fallback asset matching.
         force: Re-download even if files exist.
 
     Returns:
@@ -172,7 +174,7 @@ def fetch_artwork(
 
     # Fallback: try Lutris banners/icons
     if lutris_data_dir and not all(results.values()):
-        _try_lutris_fallback(game_name, grid_id, grid_dir, lutris_data_dir, results)
+        _try_lutris_fallback(game_name, grid_id, grid_dir, lutris_data_dir, results, slug=slug)
 
     fetched = sum(1 for v in results.values() if v)
     total = len(ARTWORK_TYPES)
@@ -190,40 +192,61 @@ def _try_lutris_fallback(
     grid_dir: Path,
     lutris_data_dir: Path,
     results: dict[str, bool],
+    slug: str = "",
 ) -> None:
-    """Try to use Lutris banners/icons as fallback artwork."""
-    # Lutris stores banners as {slug}.jpg in banners/
-    # and icons as {slug}.png in icons/ — but we need the slug
-    # We'll try common patterns
+    """Try to use Lutris banners/icons as fallback artwork.
+
+    Lutris stores banners as {slug}.jpg in banners/ and icons as
+    {slug}.png in icons/. We try slug-based matching first, then
+    fall back to name-based matching.
+    """
     banners_dir = lutris_data_dir / "banners"
     icons_dir = lutris_data_dir / "icons"
 
     if not results.get("grid_landscape", False) and banners_dir.is_dir():
-        for ext in (".jpg", ".png"):
-            for banner in banners_dir.iterdir():
-                if banner.suffix == ext:
-                    # Copy as landscape grid
-                    dest = grid_dir / f"{grid_id}.png"
-                    if not dest.exists():
-                        try:
-                            shutil.copy2(banner, dest)
-                            results["grid_landscape"] = True
-                            logger.debug("Used Lutris banner as fallback: %s", banner)
-                            break
-                        except OSError:
-                            pass
-            if results.get("grid_landscape"):
-                break
+        banner = _find_lutris_asset(banners_dir, slug, game_name, (".jpg", ".png"))
+        if banner:
+            dest = grid_dir / f"{grid_id}.png"
+            if not dest.exists():
+                try:
+                    shutil.copy2(banner, dest)
+                    results["grid_landscape"] = True
+                    logger.debug("Used Lutris banner as fallback: %s", banner)
+                except OSError:
+                    pass
 
     if not results.get("icon", False) and icons_dir.is_dir():
-        for icon in icons_dir.iterdir():
-            if icon.suffix in (".png", ".ico"):
-                dest = grid_dir / f"{grid_id}_icon.ico"
-                if not dest.exists():
-                    try:
-                        shutil.copy2(icon, dest)
-                        results["icon"] = True
-                        logger.debug("Used Lutris icon as fallback: %s", icon)
-                        break
-                    except OSError:
-                        pass
+        icon = _find_lutris_asset(icons_dir, slug, game_name, (".png", ".ico"))
+        if icon:
+            dest = grid_dir / f"{grid_id}_icon.ico"
+            if not dest.exists():
+                try:
+                    shutil.copy2(icon, dest)
+                    results["icon"] = True
+                    logger.debug("Used Lutris icon as fallback: %s", icon)
+                except OSError:
+                    pass
+
+
+def _find_lutris_asset(
+    directory: Path, slug: str, game_name: str, extensions: tuple[str, ...]
+) -> Path | None:
+    """Find a Lutris asset file by slug or name.
+
+    Tries exact slug match first, then falls back to name-based search.
+    """
+    # Try exact slug match first (most reliable)
+    if slug:
+        for ext in extensions:
+            candidate = directory / f"{slug}{ext}"
+            if candidate.exists():
+                return candidate
+
+    # Fall back to name-based search (normalized)
+    normalized_name = game_name.lower().replace(" ", "-").replace(":", "")
+    for ext in extensions:
+        for f in sorted(directory.iterdir()):
+            if f.suffix == ext and normalized_name in f.stem.lower():
+                return f
+
+    return None

@@ -122,9 +122,15 @@ def merge_configs(game_raw: dict, runner_raw: dict) -> GameConfig:
     """
     merged = _deep_merge(runner_raw, game_raw)
 
-    game_section = merged.get("game", {}) or {}
-    wine_section = merged.get("wine", {}) or {}
-    system_section = merged.get("system", {}) or {}
+    game_section = merged.get("game") or {}
+    if not isinstance(game_section, dict):
+        game_section = {}
+    wine_section = merged.get("wine") or {}
+    if not isinstance(wine_section, dict):
+        wine_section = {}
+    system_section = merged.get("system") or {}
+    if not isinstance(system_section, dict):
+        system_section = {}
 
     # Resolve working directory: explicit > exe's directory
     exe = game_section.get("exe")

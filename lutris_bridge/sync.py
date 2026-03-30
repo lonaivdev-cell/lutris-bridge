@@ -48,11 +48,20 @@ def _is_steam_running() -> bool:
 
 
 def _config_hash(game_config_path: Path) -> str:
-    """Compute a hash of a game's config file for change detection."""
+    """Compute a hash of a game's config file for change detection.
+
+    Returns an empty string if the file doesn't exist, which will trigger
+    a regeneration on next sync (safe default).
+    """
     if not game_config_path.exists():
+        logger.debug("Config file missing for hash: %s", game_config_path)
         return ""
-    content = game_config_path.read_bytes()
-    return f"sha256:{hashlib.sha256(content).hexdigest()[:16]}"
+    try:
+        content = game_config_path.read_bytes()
+        return f"sha256:{hashlib.sha256(content).hexdigest()[:16]}"
+    except OSError:
+        logger.warning("Could not read config for hashing: %s", game_config_path)
+        return ""
 
 
 def sync(
@@ -150,6 +159,7 @@ def sync(
             config.grid_dir,
             api_key=config.steamgriddb_api_key,
             lutris_data_dir=config.lutris.data_dir,
+            slug=game.slug,
         )
 
         # Build and upsert shortcut

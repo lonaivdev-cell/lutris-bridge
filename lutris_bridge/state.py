@@ -6,6 +6,7 @@ incremental updates and orphan removal.
 
 import json
 import logging
+import shutil
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -56,10 +57,26 @@ def load_state(path: Path = DEFAULT_STATE_PATH) -> BridgeState:
             steam_user_id=data.get("steam_user_id", ""),
         )
         for slug, game_data in data.get("managed_games", {}).items():
-            state.managed_games[slug] = ManagedGame(**game_data)
+            # Filter to only known fields to survive version upgrades
+            known_fields = {f.name for f in ManagedGame.__dataclass_fields__.values()}
+            filtered = {k: v for k, v in game_data.items() if k in known_fields}
+            try:
+                state.managed_games[slug] = ManagedGame(**filtered)
+            except TypeError:
+                logger.warning("Skipping malformed game entry: %s", slug)
         return state
     except Exception:
-        logger.warning("Failed to load state, starting fresh", exc_info=True)
+        # Preserve corrupted state file for manual recovery
+        backup = path.with_suffix(".json.corrupted")
+        try:
+            shutil.copy2(path, backup)
+            logger.error(
+                "State file corrupted, backed up to %s and starting fresh. "
+                "Orphaned shortcuts may need manual removal.",
+                backup,
+            )
+        except OSError:
+            logger.error("State file corrupted and could not create backup, starting fresh")
         return BridgeState()
 
 
@@ -78,7 +95,10 @@ def save_state(state: BridgeState, path: Path = DEFAULT_STATE_PATH) -> None:
             slug: asdict(game) for slug, game in state.managed_games.items()
         },
     }
-    path.write_text(json.dumps(data, indent=2) + "\n")
+    # Atomic write: write to temp file then rename to prevent corruption on crash
+    tmp_path = path.with_suffix(".json.tmp")
+    tmp_path.write_text(json.dumps(data, indent=2) + "\n")
+    tmp_path.replace(path)
     logger.debug("Saved state to %s", path)
 
 

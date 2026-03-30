@@ -46,7 +46,7 @@ def discover_games(db_path: Path) -> list[LutrisGame]:
     uri = f"file:{db_path}?mode=ro"
     games = []
 
-    with sqlite3.connect(uri, uri=True) as conn:
+    with sqlite3.connect(uri, uri=True, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
