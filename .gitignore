@@ -13,3 +13,5 @@ venv/
 htmlcov/
 *.so
 .mypy_cache/
+.venv-build/
+*.spec.bak
