@@ -14,7 +14,10 @@ lutris-bridge syncs Lutris-installed games into Steam as non-Steam shortcuts, op
 ## Build and test
 
 ```bash
-# Install dependencies
+# Editable install with dev dependencies (preferred)
+pip install -e ".[dev]"
+
+# Or install dependencies manually
 pip install pyyaml requests pytest
 
 # Run tests
@@ -22,31 +25,61 @@ python -m pytest tests/ -v
 
 # Run a single test file
 python -m pytest tests/test_shortcuts_vdf.py -v
+
+# Run with coverage
+python -m pytest tests/ --cov=lutris_bridge
 ```
 
-No build step is needed — this is a pure Python project. For editable install: `pip install -e ".[dev]"` (requires setuptools).
+### PyInstaller build
+
+```bash
+# Build a single-file executable (outputs to dist/lutris-bridge)
+./build.sh
+```
+
+This creates a `.venv-build` virtualenv, installs the project + PyInstaller, and runs `pyinstaller --clean --noconfirm lutris-bridge.spec`. The spec file (`lutris-bridge.spec`) pins hidden imports and excludes unnecessary packages (PIL, tkinter, unittest).
+
+### Entry point
+
+The CLI is registered as `lutris-bridge` via pyproject.toml:
+```
+lutris-bridge = lutris_bridge.cli:main
+```
+
+Commands: `sync`, `list`, `clean`, `status`, `generate-script`.
 
 ## Project layout
 
 ```
+pyproject.toml           # Project metadata, dependencies, entry points
+build.sh                 # PyInstaller build script (outputs dist/lutris-bridge)
+lutris-bridge.spec       # PyInstaller spec (hidden imports, excludes)
+LICENSE                  # GPL-3.0-only
+CLAUDE.md                # This file
+.gitignore               # Excludes __pycache__, venv, dist, build, .pytest_cache
+
 lutris_bridge/
-  __init__.py          # Version string
-  cli.py               # argparse entry: sync, list, clean, status, generate-script
-  config.py            # Path detection: Steam, Lutris (native/Flatpak), XDG dirs
-  lutris_db.py         # Read Lutris pga.db (SQLite, read-only)
-  lutris_config.py     # Parse Lutris game/runner YAML configs with cascade merge
-  script_gen.py        # Generate standalone bash launch scripts per game
-  steam_shortcuts.py   # Binary VDF parser/writer for shortcuts.vdf
-  steam_appid.py       # Non-Steam shortcut AppID calculation (CRC32-based)
-  artwork.py           # SteamGridDB API: fetch grid/hero/logo/icon artwork
-  sync.py              # Orchestrator: discover -> diff -> generate -> write
-  state.py             # JSON state persistence (~/.local/share/lutris-bridge/state.json)
+  __init__.py            # Version string (__version__ = "0.1.0")
+  cli.py                 # argparse entry: sync, list, clean, status, generate-script
+  config.py              # Path detection: Steam, Lutris (native/Flatpak), XDG dirs
+  lutris_db.py           # Read Lutris pga.db (SQLite, read-only)
+  lutris_config.py       # Parse Lutris game/runner YAML configs with cascade merge
+  script_gen.py          # Generate standalone bash launch scripts per game
+  steam_shortcuts.py     # Binary VDF parser/writer for shortcuts.vdf
+  steam_appid.py         # Non-Steam shortcut AppID calculation (CRC32-based)
+  artwork.py             # SteamGridDB API + Lutris fallback artwork
+  sync.py                # Orchestrator: discover -> diff -> generate -> write
+  state.py               # JSON state persistence (~/.local/share/lutris-bridge/state.json)
+
 tests/
-  test_appid.py        # AppID generation tests
-  test_lutris_db.py    # Database reader tests (uses fixtures/pga.db)
-  test_script_gen.py   # Launch script generation tests
-  test_shortcuts_vdf.py # Binary VDF round-trip tests (uses fixtures/shortcuts.vdf)
-  fixtures/            # Test fixture files (sample pga.db, shortcuts.vdf)
+  __init__.py            # (empty)
+  test_appid.py          # AppID generation tests (10 tests)
+  test_lutris_db.py      # Database reader tests (6 tests, uses fixtures/pga.db)
+  test_script_gen.py     # Launch script generation tests (27 tests)
+  test_shortcuts_vdf.py  # Binary VDF round-trip tests (40+ tests, uses fixtures/shortcuts.vdf)
+  create_test_db.py      # Regenerate fixtures/pga.db
+  create_test_vdf.py     # Regenerate fixtures/shortcuts.vdf
+  fixtures/              # Committed binary test fixtures (pga.db, shortcuts.vdf)
 ```
 
 ## Module dependency order
@@ -100,12 +133,22 @@ Lutris configs merge: game YAML > runner YAML > defaults. The `_deep_merge()` fu
 
 State file at `~/.local/share/lutris-bridge/state.json` tracks managed games for incremental sync. Uses atomic writes (temp file + rename) to prevent corruption. On load failure, corrupted file is backed up and a fresh state is created.
 
+## Dependencies
+
+Defined in `pyproject.toml`:
+
+| Group | Packages | Purpose |
+|-------|----------|---------|
+| core | `pyyaml>=6.0`, `requests>=2.28` | Always required |
+| `[artwork]` | `Pillow>=10.0` | Optional image resizing for artwork |
+| `[build]` | `pyinstaller>=6.0` | Build standalone executable |
+| `[dev]` | `pytest>=7.0`, `pytest-cov>=4.0` | Testing |
+
 ## Coding conventions
 
 - Python 3.11+ (Bazzite ships 3.12)
 - Type hints on all public functions
 - Logging via `logging` module (not print in library code)
-- Dependencies: only `pyyaml`, `requests` (Pillow optional for artwork resize)
 - Errors at system boundaries (file I/O, network, DB) are caught specifically — not blanket `except Exception`
 
 ## Common tasks
