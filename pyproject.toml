@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lutris-bridge"
+version = "0.1.0"
+description = "Sync Lutris games to Steam as non-Steam shortcuts for Gaming Mode"
+readme = "README.md"
+license = "GPL-3.0-only"
+requires-python = ">=3.11"
+authors = [{ name = "lutris-bridge contributors" }]
+keywords = ["lutris", "steam", "bazzite", "gaming", "shortcuts"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Games/Entertainment",
+]
+dependencies = [
+    "pyyaml>=6.0",
+    "requests>=2.28",
+]
+
+[project.optional-dependencies]
+artwork = ["Pillow>=10.0"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0"]
+
+[project.scripts]
+lutris-bridge = "lutris_bridge.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["lutris_bridge*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
