@@ -90,6 +90,57 @@ def _resolve_wine_binary(
     return "wine"
 
 
+def _script_preamble(slug: str) -> list[str]:
+    """Return bash preamble lines for error handling and logging.
+
+    Adds set -eo pipefail so failures aren't silent, and an ERR trap that
+    logs the failing line and exit code to a persistent log file. This is
+    critical because Steam does not capture stderr from non-Steam shortcuts.
+    """
+    return [
+        "set -eo pipefail",
+        "",
+        '_LB_LOG="$HOME/.local/share/lutris-bridge/launch-errors.log"',
+        "_lb_err() {",
+        f'    echo "[$(date -Iseconds)] FAIL {slug}: line ${{1}} exited ${{2}}" >> "$_LB_LOG"',
+        "}",
+        "trap '_lb_err ${LINENO} $?' ERR",
+        "",
+    ]
+
+
+def _command_check_lines(slug: str, cmd: str) -> list[str]:
+    """Return bash lines that verify a command exists at launch time."""
+    return [
+        f'if ! command -v "{cmd}" >/dev/null 2>&1; then',
+        f'    echo "[$(date -Iseconds)] FAIL {slug}: command not found: {cmd}" >> "$_LB_LOG"',
+        "    exit 1",
+        "fi",
+    ]
+
+
+def _workdir_check_lines(slug: str, path: str) -> list[str]:
+    """Return bash lines that verify a working directory exists."""
+    escaped = _shell_quote(path)
+    return [
+        f'if [ ! -d "{escaped}" ]; then',
+        f'    echo "[$(date -Iseconds)] FAIL {slug}: working dir not found: {path}" >> "$_LB_LOG"',
+        "    exit 1",
+        "fi",
+    ]
+
+
+def _file_exec_check_lines(slug: str, path: str) -> list[str]:
+    """Return bash lines that verify a file exists and is executable."""
+    escaped = _shell_quote(path)
+    return [
+        f'if [ ! -x "{escaped}" ]; then',
+        f'    echo "[$(date -Iseconds)] FAIL {slug}: exe not found or not executable: {path}" >> "$_LB_LOG"',
+        "    exit 1",
+        "fi",
+    ]
+
+
 def _shell_quote(s: str) -> str:
     """Escape a string for safe embedding inside bash double quotes.
 
@@ -114,6 +165,12 @@ def generate_wine_script(
     Returns:
         Script content as a string.
     """
+    if not game_config.exe:
+        raise ValueError(
+            f"Wine game '{game.name}' (slug={game.slug}) has no exe configured "
+            "— cannot generate launch script"
+        )
+
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # Determine if using umu-launcher
@@ -128,6 +185,9 @@ def generate_wine_script(
         f"# Generated: {timestamp} | Slug: {game.slug} | DO NOT EDIT — will be overwritten",
         "",
     ]
+
+    # Error handling preamble
+    lines.extend(_script_preamble(game.slug))
 
     # WINEPREFIX
     if game_config.prefix:
@@ -154,8 +214,14 @@ def generate_wine_script(
 
     lines.append("")
 
+    # Pre-flight checks
+    lines.extend(_command_check_lines(game.slug, wine_binary))
+    if game_config.gamemode:
+        lines.extend(_command_check_lines(game.slug, "gamemoderun"))
+
     # Working directory
     if game_config.working_dir:
+        lines.extend(_workdir_check_lines(game.slug, game_config.working_dir))
         lines.append(f'cd "{_shell_quote(game_config.working_dir)}"')
         lines.append("")
 
@@ -164,7 +230,7 @@ def generate_wine_script(
     if game_config.gamemode:
         cmd_prefix = "gamemoderun "
 
-    exe = game_config.exe or ""
+    exe = game_config.exe
     args = game_config.args
 
     lines.append(f'{cmd_prefix}"{_shell_quote(wine_binary)}" "{_shell_quote(exe)}" {args}'.rstrip())
@@ -178,6 +244,12 @@ def generate_linux_script(
     game_config: GameConfig,
 ) -> str:
     """Generate a bash launch script for a native Linux game."""
+    if not game_config.exe:
+        raise ValueError(
+            f"Linux game '{game.name}' (slug={game.slug}) has no exe configured "
+            "— cannot generate launch script"
+        )
+
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     lines = [
@@ -187,6 +259,9 @@ def generate_linux_script(
         "",
     ]
 
+    # Error handling preamble
+    lines.extend(_script_preamble(game.slug))
+
     # Extra environment variables
     for key, value in sorted(game_config.env.items()):
         lines.append(f'export {key}="{_shell_quote(value)}"')
@@ -194,9 +269,15 @@ def generate_linux_script(
     if game_config.env:
         lines.append("")
 
+    # Pre-flight checks
+    lines.extend(_file_exec_check_lines(game.slug, game_config.exe))
+    if game_config.gamemode:
+        lines.extend(_command_check_lines(game.slug, "gamemoderun"))
+
     # Working directory
     working_dir = game_config.working_dir
     if working_dir:
+        lines.extend(_workdir_check_lines(game.slug, working_dir))
         lines.append(f'cd "{_shell_quote(working_dir)}"')
 
     # Build launch command
@@ -204,7 +285,7 @@ def generate_linux_script(
     if game_config.gamemode:
         cmd_prefix = "gamemoderun "
 
-    exe = game_config.exe or ""
+    exe = game_config.exe
     args = game_config.args
 
     lines.append(f'{cmd_prefix}"{_shell_quote(exe)}" {args}'.rstrip())
@@ -220,15 +301,24 @@ def generate_fallback_script(game: LutrisGame) -> str:
     """
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    return _assert_no_gamescope("\n".join([
+    lines = [
         "#!/bin/bash",
         f"# lutris-bridge launch script for: {game.name}",
         f"# Generated: {timestamp} | Slug: {game.slug} | DO NOT EDIT — will be overwritten",
         f"# Fallback: using Lutris client for runner '{game.runner}'",
         "",
-        f'lutris "lutris:rungameid/{game.id}"',
-        "",
-    ]))
+    ]
+
+    # Error handling preamble
+    lines.extend(_script_preamble(game.slug))
+
+    # Pre-flight check
+    lines.extend(_command_check_lines(game.slug, "lutris"))
+    lines.append("")
+    lines.append(f'lutris "lutris:rungameid/{game.id}"')
+    lines.append("")
+
+    return _assert_no_gamescope("\n".join(lines))
 
 
 def generate_launch_script(

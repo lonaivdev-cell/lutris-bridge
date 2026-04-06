@@ -106,11 +106,6 @@ class TestWineScript:
         script = generate_wine_script(wine_game, wine_config, Path("/runners"))
         assert "gamemoderun " in script
 
-    def test_no_gamemoderun_when_disabled(self, wine_game, wine_config):
-        wine_config.gamemode = False
-        script = generate_wine_script(wine_game, wine_config, Path("/runners"))
-        assert "gamemoderun" not in script
-
     def test_no_gamescope(self, wine_game, wine_config):
         """CRITICAL: Scripts must never invoke gamescope."""
         script = generate_wine_script(wine_game, wine_config, Path("/runners"))
@@ -135,6 +130,49 @@ class TestWineScript:
         assert "Valheim" in script
         assert "valheim" in script
         assert "DO NOT EDIT" in script
+
+
+    def test_has_set_e(self, wine_game, wine_config):
+        script = generate_wine_script(wine_game, wine_config, Path("/runners"))
+        assert "set -eo pipefail" in script
+
+    def test_has_err_trap(self, wine_game, wine_config):
+        script = generate_wine_script(wine_game, wine_config, Path("/runners"))
+        assert "trap " in script
+        assert "ERR" in script
+        assert "launch-errors.log" in script
+
+    def test_validates_empty_exe(self, wine_game, wine_config):
+        wine_config.exe = None
+        with pytest.raises(ValueError, match="no exe configured"):
+            generate_wine_script(wine_game, wine_config, Path("/runners"))
+
+    def test_validates_empty_exe_str(self, wine_game, wine_config):
+        wine_config.exe = ""
+        with pytest.raises(ValueError, match="no exe configured"):
+            generate_wine_script(wine_game, wine_config, Path("/runners"))
+
+    def test_wine_command_check(self, wine_game, wine_config):
+        script = generate_wine_script(wine_game, wine_config, Path("/runners"))
+        assert 'command -v "wine"' in script
+
+    def test_umu_command_check(self, wine_game, wine_config):
+        wine_config.use_umu = True
+        script = generate_wine_script(wine_game, wine_config, Path("/runners"))
+        assert 'command -v "umu-run"' in script
+
+    def test_gamemoderun_check(self, wine_game, wine_config):
+        script = generate_wine_script(wine_game, wine_config, Path("/runners"))
+        assert 'command -v "gamemoderun"' in script
+
+    def test_no_gamemoderun_check_when_disabled(self, wine_game, wine_config):
+        wine_config.gamemode = False
+        script = generate_wine_script(wine_game, wine_config, Path("/runners"))
+        assert "gamemoderun" not in script
+
+    def test_working_dir_validation(self, wine_game, wine_config):
+        script = generate_wine_script(wine_game, wine_config, Path("/runners"))
+        assert '[ ! -d "' in script
 
 
 class TestLinuxScript:
@@ -167,6 +205,32 @@ class TestLinuxScript:
         assert "WINEPREFIX" not in script
         assert "DXVK" not in script
 
+    def test_has_set_e(self, linux_game, linux_config):
+        script = generate_linux_script(linux_game, linux_config)
+        assert "set -eo pipefail" in script
+
+    def test_has_err_trap(self, linux_game, linux_config):
+        script = generate_linux_script(linux_game, linux_config)
+        assert "trap " in script
+        assert "ERR" in script
+
+    def test_validates_empty_exe(self, linux_game, linux_config):
+        linux_config.exe = None
+        with pytest.raises(ValueError, match="no exe configured"):
+            generate_linux_script(linux_game, linux_config)
+
+    def test_exe_executable_check(self, linux_game, linux_config):
+        script = generate_linux_script(linux_game, linux_config)
+        assert '[ ! -x "' in script
+
+    def test_working_dir_validation(self, linux_game, linux_config):
+        script = generate_linux_script(linux_game, linux_config)
+        assert '[ ! -d "' in script
+
+    def test_gamemoderun_check(self, linux_game, linux_config):
+        script = generate_linux_script(linux_game, linux_config)
+        assert 'command -v "gamemoderun"' in script
+
 
 class TestFallbackScript:
     def test_uses_lutris_client(self, dosbox_game):
@@ -176,6 +240,19 @@ class TestFallbackScript:
     def test_mentions_runner(self, dosbox_game):
         script = generate_fallback_script(dosbox_game)
         assert "dosbox" in script
+
+    def test_has_set_e(self, dosbox_game):
+        script = generate_fallback_script(dosbox_game)
+        assert "set -eo pipefail" in script
+
+    def test_has_err_trap(self, dosbox_game):
+        script = generate_fallback_script(dosbox_game)
+        assert "trap " in script
+        assert "ERR" in script
+
+    def test_lutris_command_check(self, dosbox_game):
+        script = generate_fallback_script(dosbox_game)
+        assert 'command -v "lutris"' in script
 
 
 class TestGenerateLaunchScript:
