@@ -67,6 +67,7 @@ def sync(
     config: Config,
     dry_run: bool = False,
     force: bool = False,
+    selected_slugs: set[str] | None = None,
 ) -> dict[str, int]:
     """Main sync workflow.
 
@@ -77,6 +78,9 @@ def sync(
         config: Resolved configuration.
         dry_run: If True, don't write anything to disk.
         force: If True, regenerate all scripts and re-sync all games.
+        selected_slugs: If provided, only sync these game slugs.
+            Games not in the set are skipped but not removed if still
+            installed in Lutris.
 
     Returns:
         Dict with counts: {"added": N, "removed": N, "updated": N, "total": N}
@@ -93,7 +97,12 @@ def sync(
     state.steam_user_id = config.steam_user_id
 
     # 3. Discover Lutris games
-    lutris_games = discover_games(config.lutris.db_path)
+    all_lutris_games = discover_games(config.lutris.db_path)
+    if selected_slugs is not None:
+        lutris_games = [g for g in all_lutris_games if g.slug in selected_slugs]
+    else:
+        lutris_games = all_lutris_games
+    all_discovered_slugs = {g.slug for g in all_lutris_games}
     logger.info("Found %d Lutris games", len(lutris_games))
 
     # 4. Read current Steam shortcuts
@@ -104,7 +113,7 @@ def sync(
     current_slugs = {g.slug for g in lutris_games}
     managed_slugs = set(state.managed_games.keys())
     to_add = current_slugs - managed_slugs
-    to_remove = managed_slugs - current_slugs
+    to_remove = managed_slugs - all_discovered_slugs
     to_check = current_slugs & managed_slugs
 
     games_by_slug = {g.slug: g for g in lutris_games}

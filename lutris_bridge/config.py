@@ -257,6 +257,6 @@ def _load_api_key_from_config() -> str | None:
                 _, _, value = line.partition("=")
                 return value.strip().strip('"').strip("'")
     except Exception:
-        logger.warning("Failed to read config file: %s", config_file)
+        logger.warning("Failed to read config file: %s", config_file, exc_info=True)
 
     return None

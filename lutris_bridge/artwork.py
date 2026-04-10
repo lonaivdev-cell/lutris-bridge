@@ -213,7 +213,10 @@ def _try_lutris_fallback(
                     results["grid_landscape"] = True
                     logger.debug("Used Lutris banner as fallback: %s", banner)
                 except OSError:
-                    pass
+                    logger.warning(
+                        "Failed to copy Lutris banner fallback: %s -> %s",
+                        banner, dest, exc_info=True,
+                    )
 
     if not results.get("icon", False) and icons_dir.is_dir():
         icon = _find_lutris_asset(icons_dir, slug, game_name, (".png", ".ico"))
@@ -225,7 +228,10 @@ def _try_lutris_fallback(
                     results["icon"] = True
                     logger.debug("Used Lutris icon as fallback: %s", icon)
                 except OSError:
-                    pass
+                    logger.warning(
+                        "Failed to copy Lutris icon fallback: %s -> %s",
+                        icon, dest, exc_info=True,
+                    )
 
 
 def _find_lutris_asset(
