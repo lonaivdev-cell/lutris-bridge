@@ -19,6 +19,7 @@ a = Analysis(
         'lutris_bridge.state',
         'lutris_bridge.steam_appid',
         'lutris_bridge.steam_shortcuts',
+        'lutris_bridge.log',
         'lutris_bridge.sync',
         'yaml',
         'sqlite3',

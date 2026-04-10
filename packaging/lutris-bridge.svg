@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#16213e"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="256" height="256" rx="48" fill="url(#bg)"/>
+  <!-- Bridge arch -->
+  <path d="M40 170 Q128 70 216 170" stroke="#e94560" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <!-- Bridge deck -->
+  <line x1="30" y1="170" x2="226" y2="170" stroke="#e94560" stroke-width="8" stroke-linecap="round"/>
+  <!-- Bridge pillars -->
+  <line x1="80" y1="135" x2="80" y2="170" stroke="#e94560" stroke-width="6" stroke-linecap="round"/>
+  <line x1="176" y1="135" x2="176" y2="170" stroke="#e94560" stroke-width="6" stroke-linecap="round"/>
+  <!-- Left icon: Lutris goblet shape -->
+  <path d="M56 190 L56 220 M46 220 L66 220 M48 190 L64 190 L60 205 Q56 210 52 205 Z" stroke="#0f3460" stroke-width="3" fill="#0f3460"/>
+  <!-- Right icon: Steam controller shape -->
+  <circle cx="200" cy="205" r="16" stroke="#0f3460" stroke-width="3" fill="none"/>
+  <circle cx="195" cy="200" r="3" fill="#0f3460"/>
+  <circle cx="205" cy="200" r="3" fill="#0f3460"/>
+  <line x1="197" y1="210" x2="203" y2="210" stroke="#0f3460" stroke-width="2" stroke-linecap="round"/>
+  <!-- Sync arrows on bridge -->
+  <path d="M110 145 L128 135 L128 141 L148 141 L148 149 L128 149 L128 155 Z" fill="#e94560" opacity="0.8"/>
+</svg>

@@ -29,3 +29,7 @@ echo "Size: $(du -h dist/lutris-bridge | cut -f1)"
 echo ""
 echo "Smoke test:"
 dist/lutris-bridge --version
+
+echo ""
+echo "To also build the AppImage (GUI for Bazzite), run:"
+echo "  ./build-appimage.sh"

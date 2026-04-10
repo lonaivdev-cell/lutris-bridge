@@ -1,0 +1,32 @@
+FROM registry.fedoraproject.org/fedora:41
+
+RUN dnf install -y python3 python3-pip python3-devel python3-tkinter binutils wget file && dnf clean all
+
+WORKDIR /src
+COPY pyproject.toml lutris-bridge.spec lutris-bridge-gui.spec build.sh build-appimage.sh ./
+COPY lutris_bridge/ lutris_bridge/
+COPY packaging/ packaging/
+COPY tests/ tests/
+
+# Build CLI binary
+RUN python3 -m venv /build-env \
+    && /build-env/bin/pip install --quiet . pyinstaller \
+    && /build-env/bin/pyinstaller --clean --noconfirm lutris-bridge.spec
+
+# Build GUI binary
+RUN /build-env/bin/pyinstaller --clean --noconfirm lutris-bridge-gui.spec
+
+# Build AppImage (no FUSE in Docker)
+RUN ARCH=x86_64 \
+    && wget -q "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${ARCH}.AppImage" \
+    && chmod +x "appimagetool-${ARCH}.AppImage" \
+    && ./appimagetool-${ARCH}.AppImage --appimage-extract >/dev/null 2>&1 \
+    && mkdir -p lutris-bridge.AppDir/usr/bin \
+    && cp dist/lutris-bridge-gui lutris-bridge.AppDir/usr/bin/ \
+    && cp packaging/lutris-bridge.desktop lutris-bridge.AppDir/ \
+    && cp packaging/lutris-bridge.svg lutris-bridge.AppDir/ \
+    && ln -sf usr/bin/lutris-bridge-gui lutris-bridge.AppDir/AppRun \
+    && ARCH=$ARCH ./squashfs-root/AppRun lutris-bridge.AppDir "dist/lutris-bridge-${ARCH}.AppImage"
+
+# Smoke tests
+RUN /src/dist/lutris-bridge --version

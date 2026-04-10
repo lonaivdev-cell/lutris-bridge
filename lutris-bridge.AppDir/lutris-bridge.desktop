@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Lutris Bridge
+GenericName=Game Sync Tool
+Comment=Sync Lutris games to Steam as non-Steam shortcuts
+Exec=lutris-bridge-gui
+Icon=lutris-bridge
+Categories=Game;Utility;
+Terminal=false
+StartupNotify=true
