@@ -7,14 +7,6 @@ import sys
 from lutris_bridge import __version__
 
 
-def _setup_logging(verbose: bool) -> None:
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(levelname)s: %(message)s",
-    )
-
-
 def cmd_sync(args: argparse.Namespace) -> int:
     from lutris_bridge.config import build_config
     from lutris_bridge.sync import sync
@@ -196,7 +188,16 @@ def main(argv: list[str] | None = None) -> int:
     gen_parser.add_argument("slug", help="Lutris game slug")
 
     args = parser.parse_args(argv)
-    _setup_logging(args.verbose)
+
+    from lutris_bridge.log import (
+        install_unhandled_exception_hook,
+        log_session_header,
+        setup_logging,
+    )
+
+    log_file = setup_logging(verbose=args.verbose)
+    install_unhandled_exception_hook()
+    log_session_header(argv=argv if argv is not None else sys.argv[1:])
 
     if not args.command:
         parser.print_help()
@@ -216,7 +217,12 @@ def main(argv: list[str] | None = None) -> int:
         logging.error("%s", e)
         return 1
     except KeyboardInterrupt:
+        logging.debug("Interrupted by user")
         return 130
+    except Exception:
+        logging.critical("Unexpected error", exc_info=True)
+        logging.error("Log file: %s", log_file)
+        return 1
 
 
 if __name__ == "__main__":

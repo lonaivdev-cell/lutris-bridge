@@ -33,6 +33,7 @@ lutris_bridge/
   __init__.py          # Version string
   cli.py               # argparse entry: sync, list, clean, status, generate-script
   config.py            # Path detection: Steam, Lutris (native/Flatpak), XDG dirs
+  log.py               # Logging configuration: dual-output (console + rotating file)
   lutris_db.py         # Read Lutris pga.db (SQLite, read-only)
   lutris_config.py     # Parse Lutris game/runner YAML configs with cascade merge
   script_gen.py        # Generate standalone bash launch scripts per game
@@ -47,12 +48,14 @@ tests/
   test_script_gen.py   # Launch script generation tests
   test_shortcuts_vdf.py # Binary VDF round-trip tests (uses fixtures/shortcuts.vdf)
   fixtures/            # Test fixture files (sample pga.db, shortcuts.vdf)
+  # TODO: add test_log.py — tests for log.py (setup, rotation, session header, exception hook)
 ```
 
 ## Module dependency order
 
 ```
 steam_appid.py          (pure, no deps)
+log.py                  (depends on __init__ for version)
 config.py               (filesystem detection)
 lutris_db.py            (depends on config for paths)
 lutris_config.py        (depends on config for paths)
@@ -61,7 +64,7 @@ steam_shortcuts.py      (depends on steam_appid)
 state.py                (standalone JSON persistence)
 artwork.py              (depends on steam_appid, config)
 sync.py                 (orchestrates all above)
-cli.py                  (thin wrapper around sync)
+cli.py                  (thin wrapper around sync; imports log.py)
 ```
 
 ## Key implementation details
@@ -100,11 +103,29 @@ Lutris configs merge: game YAML > runner YAML > defaults. The `_deep_merge()` fu
 
 State file at `~/.local/share/lutris-bridge/state.json` tracks managed games for incremental sync. Uses atomic writes (temp file + rename) to prevent corruption. On load failure, corrupted file is backed up and a fresh state is created.
 
+## Logging
+
+Logging is configured in `log.py` and initialized in `cli.py:main()`. Two outputs:
+
+- **Console** (`stderr`): `HH:MM:SS LEVEL: message` — INFO+ by default, DEBUG with `--verbose`
+- **File** (`~/.local/share/lutris-bridge/logs/lutris-bridge.log`): always DEBUG, pipe-delimited format:
+  ```
+  2026-04-10 14:32:05 | ERROR    | lutris_bridge.artwork:_download_file:102 | Failed to download...
+  ```
+  The `module:function:line` field maps directly to source code locations.
+
+File rotation: 2 MB per file, 3 backups (8 MB total max). Every run starts with a session header block logging version, Python version, platform, argv, and cwd.
+
+All library modules use `logger = logging.getLogger(__name__)` — they inherit the file/console handlers from the root logger automatically. `print()` is only used in `cmd_list`/`cmd_status` for tabular user-facing output, not for log messages.
+
+An unhandled exception hook (`sys.excepthook`) captures unexpected crashes in the log file. The top-level `except Exception` in `main()` catches and logs anything that escapes individual command handlers.
+
 ## Coding conventions
 
 - Python 3.11+ (Bazzite ships 3.12)
 - Type hints on all public functions
 - Logging via `logging` module (not print in library code)
+- All `except` blocks that log must include `exc_info=True` for full tracebacks in the log file
 - Dependencies: only `pyyaml`, `requests` (Pillow optional for artwork resize)
 - Errors at system boundaries (file I/O, network, DB) are caught specifically — not blanket `except Exception`
 
@@ -131,6 +152,7 @@ State file at `~/.local/share/lutris-bridge/state.json` tracks managed games for
 - **Writing shortcuts.vdf** — always call `backup_shortcuts()` first. A malformed write destroys all non-Steam shortcuts.
 - **Steam must not be running** during sync — Steam overwrites shortcuts.vdf on exit. The sync warns but doesn't block.
 - **Deleting scripts in ~/.local/share/lutris-bridge/scripts/** — these are the actual executables Steam launches. Removing them breaks the shortcuts.
+- **Deleting log files in ~/.local/share/lutris-bridge/logs/** — safe to delete, but loses troubleshooting history. # TODO: add a `lutris-bridge logs` command to view/clear logs
 
 ## Test fixtures
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lutris-bridge"
-version = "0.1.0"
+version = "0.2.0"
 description = "Sync Lutris games to Steam as non-Steam shortcuts for Gaming Mode"
 license = "GPL-3.0-only"
 requires-python = ">=3.11"
@@ -30,6 +30,7 @@ dev = ["pytest>=7.0", "pytest-cov>=4.0"]
 
 [project.scripts]
 lutris-bridge = "lutris_bridge.cli:main"
+lutris-bridge-gui = "lutris_bridge.gui:main"
 
 [tool.setuptools.packages.find]
 include = ["lutris_bridge*"]
