@@ -2,7 +2,6 @@
 
 import stat
 from pathlib import Path
-
 import pytest
 
 from lutris_bridge.lutris_config import GameConfig
@@ -79,6 +78,12 @@ def dosbox_game():
     )
 
 
+@pytest.fixture(autouse=True)
+def _no_umu(monkeypatch):
+    """Default: pretend umu-run is not installed so Wine-direct tests work."""
+    monkeypatch.setattr("lutris_bridge.script_gen._umu_available", lambda: False)
+
+
 class TestWineScript:
     def test_has_shebang(self, wine_game, wine_config):
         script = generate_wine_script(wine_game, wine_config, Path("/runners"))
@@ -125,10 +130,25 @@ class TestWineScript:
         assert "valheim.exe" in script
         assert "-console" in script
 
-    def test_umu_launcher(self, wine_game, wine_config):
+    def test_umu_launcher_via_config(self, wine_game, wine_config):
         wine_config.use_umu = True
         script = generate_wine_script(wine_game, wine_config, Path("/runners"))
         assert "umu-run" in script
+        assert 'export GAMEID="umu-valheim"' in script
+        assert 'export PROTONPATH="GE-Proton"' in script
+        assert 'export STORE="none"' in script
+
+    def test_umu_auto_detected(self, wine_game, wine_config, monkeypatch):
+        monkeypatch.setattr("lutris_bridge.script_gen._umu_available", lambda: True)
+        script = generate_wine_script(wine_game, wine_config, Path("/runners"))
+        assert "umu-run" in script
+        assert 'export GAMEID="umu-valheim"' in script
+        assert 'export PROTONPATH="GE-Proton"' in script
+
+    def test_falls_back_to_wine_without_umu(self, wine_game, wine_config):
+        script = generate_wine_script(wine_game, wine_config, Path("/runners"))
+        assert "umu-run" not in script
+        assert "GAMEID" not in script
 
     def test_header_comment(self, wine_game, wine_config):
         script = generate_wine_script(wine_game, wine_config, Path("/runners"))

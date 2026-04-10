@@ -245,9 +245,12 @@ class WelcomePage(WizardPage):
             "    \u2022  Fetch artwork from SteamGridDB (optional)\n\n"
             "Click Next to continue, or Cancel to exit."
         )
-        Win98Style.label(
+        self.body_label = Win98Style.label(
             self, text=body, justify="left", wraplength=400,
-        ).pack(anchor="nw", padx=20, pady=(0, 12))
+        )
+        self.body_label.pack(anchor="nw", padx=20, pady=(0, 12), fill="x")
+        self.body_label.bind("<Configure>", lambda e: self.body_label.config(
+            wraplength=max(e.width - 4, 100)))
 
         # Version at bottom
         Win98Style.label(
@@ -416,8 +419,9 @@ class GameListPage(WizardPage):
 
         self.inner_frame.bind("<Configure>", lambda _: self.canvas.configure(
             scrollregion=self.canvas.bbox("all")))
-        self.canvas.create_window((0, 0), window=self.inner_frame, anchor="nw")
+        self._canvas_window = self.canvas.create_window((0, 0), window=self.inner_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.canvas.bind("<Configure>", self._on_canvas_resize)
 
         self.scrollbar.pack(side="right", fill="y")
         self.canvas.pack(side="left", fill="both", expand=True)
@@ -428,6 +432,9 @@ class GameListPage(WizardPage):
 
         self.count_label = Win98Style.label(self, text="", fg="#808080")
         self.count_label.pack(anchor="sw", padx=20, pady=(0, 8))
+
+    def _on_canvas_resize(self, event: tk.Event) -> None:
+        self.canvas.itemconfig(self._canvas_window, width=event.width)
 
     def on_show(self) -> None:
         self.wizard.update_buttons(back=True, next=True, cancel=True, next_text="Next >")
@@ -780,7 +787,9 @@ class CompletePage(WizardPage):
         self.body_label = Win98Style.label(
             self, text="", justify="left", wraplength=400,
         )
-        self.body_label.pack(anchor="nw", padx=20, pady=(0, 8))
+        self.body_label.pack(anchor="nw", padx=20, pady=(0, 8), fill="x")
+        self.body_label.bind("<Configure>", lambda e: self.body_label.config(
+            wraplength=max(e.width - 4, 100)))
 
         # Summary frame
         self.summary_frame = Win98Style.sunken_frame(self)
@@ -905,7 +914,8 @@ class SyncWizard(tk.Tk):
 
         self.title("lutris-bridge Sync Wizard")
         self.geometry("660x500")
-        self.resizable(False, False)
+        self.minsize(560, 420)
+        self.resizable(True, True)
         self.configure(bg=Win98Style.BG)
 
         # Shared state populated by pages

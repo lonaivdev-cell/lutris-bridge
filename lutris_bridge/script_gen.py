@@ -11,6 +11,7 @@ and controller input.
 
 import logging
 import re
+import shutil
 import stat
 from datetime import datetime, timezone
 from pathlib import Path
@@ -90,6 +91,11 @@ def _resolve_wine_binary(
     return "wine"
 
 
+def _umu_available() -> bool:
+    """Check if umu-run is available on the system."""
+    return shutil.which("umu-run") is not None
+
+
 def _shell_quote(s: str) -> str:
     """Escape a string for safe embedding inside bash double quotes.
 
@@ -116,8 +122,11 @@ def generate_wine_script(
     """
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Determine if using umu-launcher
-    if game_config.use_umu:
+    # Determine if using umu-run: prefer it when available (required for
+    # Steam Linux Runtime / Bazzite Gaming Mode compatibility), fall back
+    # to Lutris's Wine binary only when umu-run is not installed.
+    use_umu = game_config.use_umu or _umu_available()
+    if use_umu:
         wine_binary = "umu-run"
     else:
         wine_binary = _resolve_wine_binary(runners_dir, game_config.wine_version)
@@ -132,6 +141,12 @@ def generate_wine_script(
     # WINEPREFIX
     if game_config.prefix:
         lines.append(f'export WINEPREFIX="{_shell_quote(game_config.prefix)}"')
+
+    # umu-run environment
+    if use_umu:
+        lines.append(f'export GAMEID="umu-{game.slug}"')
+        lines.append('export PROTONPATH="GE-Proton"')
+        lines.append('export STORE="none"')
 
     # DLL overrides
     if game_config.dll_overrides:
